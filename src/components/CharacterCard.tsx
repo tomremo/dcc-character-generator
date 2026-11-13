@@ -19,6 +19,7 @@ import {
   AbilityKey,
   Alignment,
   Character,
+  DCC_CONDITION_PRESETS,
   STARTER_ITEM_SUGGESTIONS,
   formatCoins,
   formatMod,
@@ -50,6 +51,8 @@ export interface CharacterCardProps {
   onAdjustAbility: (stat: AbilityKey, delta: number) => void;
   onResetAbilities: () => void;
   onAdjustXp: (delta: number) => void;
+  onToggleCondition: (condition: string) => void;
+  onAddCondition: (condition: string) => void;
   onRoll: (request: CharacterRollRequest) => void;
   onOpenShop: () => void;
   onOpenLog: () => void;
@@ -69,6 +72,8 @@ export function CharacterCard({
   onAdjustAbility,
   onResetAbilities,
   onAdjustXp,
+  onToggleCondition,
+  onAddCondition,
   onRoll,
   onOpenShop,
   onOpenLog,
@@ -81,6 +86,8 @@ export function CharacterCard({
   const [pendingRemove, setPendingRemove] = useState<{ index: number; name: string } | null>(null);
   const [isEditingPurse, setIsEditingPurse] = useState(false);
   const [coinInputs, setCoinInputs] = useState(() => splitCoins(char.coins));
+  const [isAddingCondition, setIsAddingCondition] = useState(false);
+  const [customCondition, setCustomCondition] = useState('');
   const nameInputId = useId();
   const alignSelectId = useId();
   const addItemInputId = useId();
@@ -803,6 +810,101 @@ export function CharacterCard({
             <dt className="font-bold text-[#4a3728] shrink-0">Languages:</dt>
             <dd className="font-medium text-right text-[#1a1410]">
               {char.knownLanguages.join(', ')}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3 items-start">
+            <dt className="font-bold text-[#4a3728] shrink-0 flex items-center gap-1">
+              <span>Conditions:</span>
+              <button
+                type="button"
+                onClick={() => setIsAddingCondition((prev) => !prev)}
+                aria-label={`Manage conditions for ${char.name}`}
+                title="Add or toggle status conditions"
+                className="print:hidden px-1.5 py-0.5 inline-flex items-center gap-0.5 rounded-sm bg-[#eadbb8] hover:bg-[#dcc594] text-[10px] font-bold text-[#3d2817] border border-[#7c5828] cursor-pointer"
+              >
+                <Plus className="w-2.5 h-2.5" aria-hidden="true" />
+                <span>Status</span>
+              </button>
+            </dt>
+            <dd className="font-medium text-right text-[#1a1410] flex-1">
+              <div className="flex flex-wrap justify-end gap-1">
+                {(char.conditions ?? []).length === 0 ? (
+                  <span className="italic text-[#5c4938]">None</span>
+                ) : (
+                  (char.conditions ?? []).map((cond) => (
+                    <span
+                      key={cond}
+                      className="inline-flex items-center gap-1 bg-[#f8e7e2] border border-[#991b1b]/50 text-[#7f1d1d] rounded-sm px-1.5 py-0.5 text-[11px] font-bold print:bg-transparent print:border-black print:text-black"
+                    >
+                      <span>{cond}</span>
+                      <button
+                        type="button"
+                        onClick={() => onToggleCondition(cond)}
+                        aria-label={`Remove condition ${cond} from ${char.name}`}
+                        className="print:hidden text-[#991b1b] hover:text-[#450a0a] cursor-pointer leading-none"
+                      >
+                        <X className="w-3 h-3" aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {isAddingCondition && (
+                <div className="print:hidden mt-1.5 p-1.5 bg-[#f4ebd0] border border-[#b89f78] rounded-sm space-y-1.5 text-left">
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {DCC_CONDITION_PRESETS.map((preset) => {
+                      const active = (char.conditions ?? []).some(
+                        (c) => c.toLowerCase() === preset.toLowerCase()
+                      );
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => onToggleCondition(preset)}
+                          aria-pressed={active}
+                          className={`px-1.5 py-0.5 text-[10px] font-bold rounded-sm border cursor-pointer transition ${
+                            active
+                              ? 'bg-[#8b1a1a] text-[#fef2f2] border-[#5c1111]'
+                              : 'bg-[#fdf8ed] text-[#3d2817] border-[#b89f78] hover:bg-[#eadbb8]'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!customCondition.trim()) return;
+                      onAddCondition(customCondition);
+                      setCustomCondition('');
+                    }}
+                    className="flex items-center justify-end gap-1"
+                  >
+                    <input
+                      type="text"
+                      value={customCondition}
+                      onChange={(e) => setCustomCondition(e.target.value)}
+                      placeholder="Custom status (e.g. Poisoned)"
+                      aria-label="Custom condition"
+                      className="px-2 py-0.5 bg-white border border-[#5c3d1e] rounded-sm text-xs text-[#1a1410] w-40"
+                    />
+                    <Button type="submit" variant="crimson" size="xs">
+                      Add
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCondition(false)}
+                      aria-label="Close condition picker"
+                      className="p-0.5 text-[#5c4938] hover:text-[#1a1410] cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  </form>
+                </div>
+              )}
             </dd>
           </div>
         </dl>

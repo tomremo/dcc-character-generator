@@ -5,6 +5,7 @@ import {
   Alignment,
   Character,
   ShopItem,
+  addCharacterCondition,
   addInventoryItem,
   adjustAbilityScore,
   adjustXp,
@@ -14,6 +15,7 @@ import {
   removeInventoryItem,
   resetAbilityOverrides,
   setCoinsFromDenominations,
+  toggleCharacterCondition,
 } from './src/dccData';
 import { copyTextReliable, formatPartyMarkdown } from './src/exportUtils';
 import { loadSoundPreference, playDiceSound, saveSoundPreference } from './src/soundUtils';
@@ -25,6 +27,7 @@ import { EquipmentShopModal } from './src/components/EquipmentShopModal';
 import { ExportModal } from './src/components/ExportModal';
 import { InitiativeTracker } from './src/components/InitiativeTracker';
 import { RollLogModal } from './src/components/RollLogModal';
+import { TorchTurnBar } from './src/components/TorchTurnBar';
 import { Button, SegmentedTabs } from './src/components/ui';
 import {
   DccDieSides,
@@ -40,6 +43,13 @@ import {
   rollPartyInitiative,
   sortInitiativeEntries,
 } from './src/initiativeUtils';
+import {
+  TorchTrackerState,
+  advanceDungeonTurn,
+  createInitialTorchState,
+  lightNewTorch,
+  resetTorchTracker,
+} from './src/torchTrackerUtils';
 
 const PARTY_MODE_TABS: ReadonlyArray<{ id: PartyMode; label: React.ReactNode }> = [
   {
@@ -91,6 +101,7 @@ export default function App() {
   const [activeTurnIndex, setActiveTurnIndex] = useState(0);
   const [initiativeRound, setInitiativeRound] = useState(1);
   const [isInitOpen, setIsInitOpen] = useState(false);
+  const [torchState, setTorchState] = useState<TorchTrackerState>(() => createInitialTorchState());
 
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
@@ -188,6 +199,18 @@ export default function App() {
   const handleAdjustXp = (charId: string, deltaXp: number) => {
     setParty((prev) =>
       prev.map((c) => (c.id === charId ? adjustXp(c, deltaXp) : c))
+    );
+  };
+
+  const handleToggleCondition = (charId: string, condition: string) => {
+    setParty((prev) =>
+      prev.map((c) => (c.id === charId ? toggleCharacterCondition(c, condition) : c))
+    );
+  };
+
+  const handleAddCondition = (charId: string, condition: string) => {
+    setParty((prev) =>
+      prev.map((c) => (c.id === charId ? addCharacterCondition(c, condition) : c))
     );
   };
 
@@ -493,6 +516,13 @@ export default function App() {
 
       {/* MAIN CONTAINER */}
       <main className="max-w-6xl mx-auto">
+        <TorchTurnBar
+          state={torchState}
+          onAdvanceTurn={() => setTorchState((prev) => advanceDungeonTurn(prev))}
+          onLightTorch={() => setTorchState((prev) => lightNewTorch(prev))}
+          onReset={() => setTorchState(resetTorchTracker())}
+        />
+
         <InitiativeTracker
           entries={initiativeEntries}
           activeTurnIndex={activeTurnIndex}
@@ -531,6 +561,8 @@ export default function App() {
               onAdjustAbility={(stat, delta) => handleAdjustAbility(char.id, stat, delta)}
               onResetAbilities={() => handleResetAbilities(char.id)}
               onAdjustXp={(delta) => handleAdjustXp(char.id, delta)}
+              onToggleCondition={(cond) => handleToggleCondition(char.id, cond)}
+              onAddCondition={(cond) => handleAddCondition(char.id, cond)}
               onRoll={(req) => handleCharacterRoll(char, req)}
               onOpenShop={() => setActiveShopCharId(char.id)}
               onOpenLog={() => setActiveLogCharId(char.id)}

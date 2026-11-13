@@ -110,6 +110,7 @@ export interface Character {
   inventory: string[];
   coins: number;
   specialNotes: string[];
+  conditions?: string[];
   knownLanguages: string[];
   diceLog: string[];
   isFarmer?: boolean;
@@ -681,6 +682,40 @@ export const removeInventoryItem = (char: Character, index: number): Character =
   );
 };
 
+export const DCC_CONDITION_PRESETS = [
+  'Prone',
+  'Disarmed',
+  'Blinded',
+  'Stunned',
+  'Grappled',
+  "-10' Speed",
+] as const;
+
+export const addCharacterCondition = (char: Character, condition: string): Character => {
+  const trimmed = condition.trim();
+  if (!trimmed) return char;
+  const current = char.conditions ?? [];
+  if (current.some((c) => c.toLowerCase() === trimmed.toLowerCase())) return char;
+  return { ...char, conditions: [...current, trimmed] };
+};
+
+export const removeCharacterCondition = (char: Character, condition: string): Character => {
+  const current = char.conditions ?? [];
+  const next = current.filter((c) => c.toLowerCase() !== condition.trim().toLowerCase());
+  if (next.length === current.length) return char;
+  return { ...char, conditions: next };
+};
+
+export const toggleCharacterCondition = (char: Character, condition: string): Character => {
+  const trimmed = condition.trim();
+  if (!trimmed) return char;
+  const current = char.conditions ?? [];
+  const exists = current.some((c) => c.toLowerCase() === trimmed.toLowerCase());
+  return exists
+    ? removeCharacterCondition(char, trimmed)
+    : addCharacterCondition(char, trimmed);
+};
+
 const recomputeCharacterFromAbilities = (
   char: Character,
   nextAbilities: Record<AbilityKey, number>
@@ -1052,6 +1087,7 @@ export const generateCharacter = (partyContext: Character[] = []): Character => 
     inventory: [gearItem, tradeItem, ...(ammoText ? [ammoText] : [])],
     coins: totalCp,
     specialNotes,
+    conditions: [],
     knownLanguages,
     diceLog,
     isFarmer: occData.isFarmer,

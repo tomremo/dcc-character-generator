@@ -7,6 +7,7 @@ import {
   SOBRIQUETS,
   STARTER_ITEM_SUGGESTIONS,
   WEAPON_DATA,
+  addCharacterCondition,
   addInventoryItem,
   adjustAbilityScore,
   adjustCoins,
@@ -18,12 +19,14 @@ import {
   generateRandomName,
   getAbilityMod,
   getShieldRestrictionReason,
+  removeCharacterCondition,
   removeInventoryItem,
   resetAbilityOverrides,
   setCoinsFromDenominations,
   splitCoins,
   swapFirstName,
   swapSobriquet,
+  toggleCharacterCondition,
 } from '../dccData';
 
 describe('Table 1-1 & formatting helpers', () => {
@@ -233,6 +236,27 @@ describe('Equipment purchase & removal', () => {
 
     const withSingle = addInventoryItem(base, 'Silver key', 1);
     expect(withSingle.inventory).toEqual(['Torch (1)', 'Silver key']);
+  });
+
+  it('adds, removes, and toggles character conditions case-insensitively without duplicates', () => {
+    const base = generateCharacter([]);
+    expect(base.conditions).toEqual([]);
+
+    const withProne = addCharacterCondition(base, '  Prone ');
+    expect(withProne.conditions).toEqual(['Prone']);
+
+    // Duplicate (different case) should be ignored
+    expect(addCharacterCondition(withProne, 'prone')).toBe(withProne);
+    expect(addCharacterCondition(withProne, '   ')).toBe(withProne);
+
+    const withTwo = toggleCharacterCondition(withProne, 'Blinded');
+    expect(withTwo.conditions).toEqual(['Prone', 'Blinded']);
+
+    const toggledOff = toggleCharacterCondition(withTwo, 'PRONE');
+    expect(toggledOff.conditions).toEqual(['Blinded']);
+
+    const cleared = removeCharacterCondition(toggledOff, 'blinded');
+    expect(cleared.conditions).toEqual([]);
   });
 
   it('splits, adjusts, and sets coinage by gp/sp/cp denominations', () => {
