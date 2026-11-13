@@ -1,25 +1,44 @@
 @import "tailwindcss";
 @source "../dcc_rpg_level_0_character_generator.tsx";
 @source "./";
+@source "./components";
 
 :root {
   --font-display: 'Cinzel', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
   --font-body: 'Crimson Pro', 'Palatino Linotype', Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  --surface-obsidian: #14110f;
+  --surface-panel: #1f1914;
+  --surface-panel-deep: #110e0c;
+  --surface-wood: #3d2817;
+  --surface-wood-hover: #523620;
+
   --ink-primary: #1a1410;
   --ink-muted: #4a3728;
   --ink-crimson: #8b1a1a;
+  --ink-ochre: #6e2c14;
+  --ink-parchment: #e7dec8;
+  --ink-gold: #f3d37a;
+
   --parchment-bg: #f4ebd0;
   --parchment-alt: #eadbb8;
   --parchment-border: #3d2817;
+  --border-wood: #5c3d1e;
+  --border-gold: #7c5828;
 }
 
 body {
   font-family: var(--font-body);
-  background-color: #14110f;
-  color: #e7dec8;
+  background-color: var(--surface-obsidian);
+  color: var(--ink-parchment);
   margin: 0;
+}
+
+.dcc-panel {
+  background-color: var(--surface-panel);
+  border: 2px solid var(--border-gold);
+  color: var(--ink-parchment);
 }
 
 .font-display {

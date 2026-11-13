@@ -133,17 +133,56 @@ export const getAbilityMod = (score: number): number => {
   return 3;
 };
 
-// Appendix S: Sobriquets & Names
-export const SOBRIQUET_NAMES: string[] = [
-  'Agnes the Unwashed', 'Bartholomew Turnip-Biter', 'Bridget the Clumsy', 'Corvin the Stout',
-  'Dagr Mud-Foot', 'Eldrin the Simple', 'Fiona of the Mire', 'Giles the Blind',
-  'Hildy Pig-Tender', 'Ignatius the Coward', 'Joram Slop-Bucket', 'Katla Fish-Breath',
-  'Lysandra the Pale', 'Milo Butter-Fingers', 'Nesta the Silent', 'Orlo Wood-Chopper',
-  'Pippa Cabbage-Ear', 'Quentin the Drunk', 'Rorik Iron-Lack', 'Sibyl the Scabrous',
-  'Tristan No-Nails', 'Ulf the Half-Minded', 'Valeria the Weeping', 'Willem Ditch-Digger',
-  'Yara the Toothless', 'Zephyr the Ragged', 'Aldous Rat-Catcher', 'Berylla Leech-Gatherer',
-  'Cuthbert Snot-Nose', 'Dorothy Scraps', 'Eustace Charcoal-Burner', 'Gunnar Stone-Fist',
+// Appendix S: Mix-and-Match First Names & Sobriquets (96 x 96 = 9,216 combinations)
+export const FIRST_NAMES: string[] = [
+  'Agnes', 'Aldous', 'Bartholomew', 'Berylla', 'Bridget', 'Corvin', 'Cuthbert', 'Dagr',
+  'Dorothy', 'Eldrin', 'Eustace', 'Fiona', 'Giles', 'Gunnar', 'Hildy', 'Ignatius',
+  'Joram', 'Katla', 'Lysandra', 'Milo', 'Nesta', 'Orlo', 'Pippa', 'Quentin',
+  'Rorik', 'Sibyl', 'Tristan', 'Ulf', 'Valeria', 'Willem', 'Yara', 'Zephyr',
+  'Aelfric', 'Alaric', 'Anselm', 'Astrid', 'Balthazar', 'Beatrix', 'Bram', 'Brunhild',
+  'Cedric', 'Clara', 'Clovis', 'Cordelia', 'Dagmar', 'Dorian', 'Dunstan', 'Edith',
+  'Egbert', 'Elspeth', 'Emrys', 'Ermentrude', 'Fenris', 'Freya', 'Gareth', 'Gertrude',
+  'Godfrey', 'Griselda', 'Hadrian', 'Helga', 'Hubert', 'Ida', 'Ivor', 'Jocelyn',
+  'Kendrick', 'Leif', 'Lothar', 'Mabel', 'Magnus', 'Margery', 'Matilda', 'Morwenna',
+  'Ned', 'Nigel', 'Odo', 'Olga', 'Osric', 'Oswald', 'Petra', 'Prudence',
+  'Radulf', 'Ragna', 'Reginald', 'Rowan', 'Sabine', 'Sigmund', 'Sigrid', 'Simeon',
+  'Sylvan', 'Thaddeus', 'Theodora', 'Tobias', 'Ursula', 'Vance', 'Waldo', 'Wulfric',
 ];
+
+export const SOBRIQUETS: string[] = [
+  'the Unwashed', 'Turnip-Biter', 'the Clumsy', 'the Stout', 'Mud-Foot', 'the Simple',
+  'of the Mire', 'the Blind', 'Pig-Tender', 'the Coward', 'Slop-Bucket', 'Fish-Breath',
+  'the Pale', 'Butter-Fingers', 'the Silent', 'Wood-Chopper', 'Cabbage-Ear', 'the Drunk',
+  'Iron-Lack', 'the Scabrous', 'No-Nails', 'the Half-Minded', 'the Weeping', 'Ditch-Digger',
+  'the Toothless', 'the Ragged', 'Rat-Catcher', 'Leech-Gatherer', 'Snot-Nose', 'Scraps',
+  'Charcoal-Burner', 'Stone-Fist', 'the Warted', 'Ash-Cheek', 'the Bent', 'Bog-Trotter',
+  'Bone-Picker', 'the Blear-Eyed', 'Bran-Belly', 'the Broken', 'Cinder-Toe', 'Clod-Hopper',
+  'the Crooked', 'Crow-Bait', 'Damp-Cloak', 'the Dim', 'Dung-Cart', 'the Earless',
+  'Flea-Bitten', 'the Forsaken', 'Frog-Eye', 'Gallows-Luck', 'the Gaunt', 'Gnat-Swarm',
+  'Grave-Spade', 'Grease-Thumb', 'the Grim', 'Grub-Eater', 'Half-Tooth', 'Hay-Seed',
+  'the Hoarse', 'Hog-Caller', 'the Hollow', 'the Hunchbacked', 'Kettle-Black', 'the Lame',
+  'Lard-Barrel', 'Lice-Ridden', 'the Limping', 'Maggot-Pie', 'Mire-Born', 'the Moldy',
+  'Moss-Beard', 'Muck-Rake', 'the Mumbling', 'Nettle-Rash', 'the Nine-Fingered', 'Oat-Chaff',
+  'Onion-Skin', 'the Pockmarked', 'Puddle-Jumper', 'the Queasy', 'Rag-and-Bone', 'the Rheumy',
+  'Rot-Tooth', 'Rust-Bucket', 'Salt-Crusted', 'Scum-Skimmer', 'the Shivering', 'Soot-Snout',
+  'the Squinting', 'Stump-Leg', 'Tallow-Face', 'the Twitching', 'Worm-Bait', 'the Wretched',
+];
+
+const pickRandom = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
+
+export const generateRandomName = (): string => `${pickRandom(FIRST_NAMES)} ${pickRandom(SOBRIQUETS)}`;
+
+export const swapFirstName = (currentName: string): string => {
+  const matchedSobriquet = SOBRIQUETS.find((s) => currentName.endsWith(` ${s}`));
+  const sobriquet = matchedSobriquet ?? pickRandom(SOBRIQUETS);
+  return `${pickRandom(FIRST_NAMES)} ${sobriquet}`;
+};
+
+export const swapSobriquet = (currentName: string): string => {
+  const matchedFirst = FIRST_NAMES.find((f) => currentName.startsWith(`${f} `));
+  const first = matchedFirst ?? pickRandom(FIRST_NAMES);
+  return `${first} ${pickRandom(SOBRIQUETS)}`;
+};
 
 // Table 1-2: Lucky Sign / Birth Augur (1-30)
 export const BIRTH_AUGURS: BirthAugur[] = [
@@ -531,6 +570,56 @@ export const buyEquipmentItem = (char: Character, item: ShopItem): Character => 
   };
 };
 
+const ARMOR_CATALOG: ReadonlyArray<{
+  match: string[];
+  label: string;
+  bonus: number;
+  checkPen: number;
+  fumble: string;
+}> = [
+  { match: ['Hide Armor (+3 AC)', 'Hide armor'], label: 'Hide armor', bonus: 3, checkPen: -3, fumble: '1d12' },
+  { match: ['Leather Armor (+2 AC)', 'Leather armor'], label: 'Leather armor', bonus: 2, checkPen: -1, fumble: '1d8' },
+];
+
+export const removeInventoryItem = (char: Character, index: number): Character => {
+  if (index < 0 || index >= char.inventory.length) return char;
+
+  const updatedInventory = char.inventory.filter((_, idx) => idx !== index);
+  const hasShield = updatedInventory.some((item) => item === 'Shield' || item === 'Shield (+1 AC)');
+
+  const bestArmor = ARMOR_CATALOG.find((entry) =>
+    updatedInventory.some((item) => entry.match.includes(item))
+  );
+
+  const baseArmorLabel = bestArmor ? bestArmor.label : 'Unarmored';
+  const armorBonus = bestArmor ? bestArmor.bonus : 0;
+  const armorCheckPenalty = bestArmor ? bestArmor.checkPen : 0;
+  const armorFumbleDie = bestArmor ? bestArmor.fumble : '1d4';
+
+  const armor = hasShield
+    ? baseArmorLabel === 'Unarmored'
+      ? 'Shield'
+      : `${baseArmorLabel} + Shield`
+    : baseArmorLabel;
+
+  const ac = char.baseAC + armorBonus + (hasShield ? 1 : 0) + char.augurACBonus;
+  const checkPenalty = armorCheckPenalty + (hasShield ? -1 : 0);
+  const fumbleDie = hasShield ? worseFumbleDie(armorFumbleDie, '1d8') : armorFumbleDie;
+
+  return {
+    ...char,
+    inventory: updatedInventory,
+    ac,
+    armor,
+    armorBonus,
+    armorCheckPenalty,
+    armorFumbleDie,
+    hasShield,
+    checkPenalty,
+    fumbleDie,
+  };
+};
+
 // ==========================================
 // CHARACTER GENERATION LOGIC
 // ==========================================
@@ -709,8 +798,8 @@ export const generateCharacter = (partyContext: Character[] = []): Character => 
     if (augurObj.id === 9) thrownDmgBonus += luckMod;
   }
 
-  // Name from Sobriquets
-  const name = SOBRIQUET_NAMES[Math.floor(Math.random() * SOBRIQUET_NAMES.length)];
+  // Name from First Names & Sobriquets
+  const name = generateRandomName();
 
   // 9. Languages (Appendix L, with duplicate re-roll)
   const knownLanguages: string[] = ['Common'];
