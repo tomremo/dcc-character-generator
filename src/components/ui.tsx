@@ -216,7 +216,7 @@ export function ModalDialog({
       ref={dialogRef}
       aria-labelledby={titleId}
       {...({ closedby: 'any' } as Record<string, string>)}
-      className={`w-full ${maxWidthClass} rounded-md shadow-2xl`}
+      className={`w-[calc(100vw-2rem)] ${maxWidthClass} rounded-md shadow-2xl`}
     >
       <div className={surfaceClass}>
         <div className={`flex items-center justify-between ${headerBorderClass} pb-2 mb-3 gap-2`}>
@@ -271,5 +271,51 @@ export function StatusBanner({
       {icon}
       <span>{children}</span>
     </div>
+  );
+}
+
+export interface ConfirmDialogProps {
+  title: string;
+  message: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export function ConfirmDialog({
+  title,
+  message,
+  confirmLabel = 'Remove',
+  cancelLabel = 'Cancel',
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
+  return (
+    <ModalDialog
+      onClose={onCancel}
+      title={title}
+      closeLabel={`Close ${title}`}
+      maxWidthClass="max-w-sm"
+      footer={(close) => (
+        <div className="flex justify-end gap-2">
+          <Button variant="parchment" size="sm" onClick={close}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant="crimson"
+            size="sm"
+            onClick={() => {
+              onConfirm();
+              close();
+            }}
+          >
+            {confirmLabel}
+          </Button>
+        </div>
+      )}
+    >
+      <p className="text-sm text-[#1a1410] font-medium">{message}</p>
+    </ModalDialog>
   );
 }

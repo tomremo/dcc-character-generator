@@ -1,13 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, Copy, Dice5, Download, Printer, RotateCcw, User, Users } from 'lucide-react';
 import {
+  AbilityKey,
   Alignment,
   Character,
   ShopItem,
+  addInventoryItem,
+  adjustAbilityScore,
+  adjustXp,
   buyEquipmentItem,
   generateCharacter,
   generateRandomName,
   removeInventoryItem,
+  resetAbilityOverrides,
+  setCoinsFromDenominations,
 } from './src/dccData';
 import { copyTextReliable, formatPartyMarkdown } from './src/exportUtils';
 import { PartyMode, loadSavedPartyState, savePartyState } from './src/storageUtils';
@@ -122,8 +128,36 @@ export default function App() {
     setParty((prev) => prev.map((c) => (c.id === charId ? buyEquipmentItem(c, item) : c)));
   };
 
+  const handleAddItem = (charId: string, itemName: string) => {
+    setParty((prev) => prev.map((c) => (c.id === charId ? addInventoryItem(c, itemName) : c)));
+  };
+
   const handleRemoveItem = (charId: string, index: number) => {
     setParty((prev) => prev.map((c) => (c.id === charId ? removeInventoryItem(c, index) : c)));
+  };
+
+  const handleSetCoins = (charId: string, gp: number, sp: number, cp: number) => {
+    setParty((prev) =>
+      prev.map((c) => (c.id === charId ? setCoinsFromDenominations(c, gp, sp, cp) : c))
+    );
+  };
+
+  const handleAdjustAbility = (charId: string, stat: AbilityKey, delta: number) => {
+    setParty((prev) =>
+      prev.map((c) => (c.id === charId ? adjustAbilityScore(c, stat, delta) : c))
+    );
+  };
+
+  const handleResetAbilities = (charId: string) => {
+    setParty((prev) =>
+      prev.map((c) => (c.id === charId ? resetAbilityOverrides(c) : c))
+    );
+  };
+
+  const handleAdjustXp = (charId: string, deltaXp: number) => {
+    setParty((prev) =>
+      prev.map((c) => (c.id === charId ? adjustXp(c, deltaXp) : c))
+    );
   };
 
   const announceCopy = (ok: boolean) => {
@@ -255,7 +289,12 @@ export default function App() {
               onUpdateAlignment={(align) => updateCharacterAlignment(char.id, align)}
               onAdjustHp={(delta) => adjustHp(char.id, delta)}
               onToggleDead={() => toggleDead(char.id)}
+              onAddItem={(itemName) => handleAddItem(char.id, itemName)}
               onRemoveItem={(idx) => handleRemoveItem(char.id, idx)}
+              onSetCoins={(gp, sp, cp) => handleSetCoins(char.id, gp, sp, cp)}
+              onAdjustAbility={(stat, delta) => handleAdjustAbility(char.id, stat, delta)}
+              onResetAbilities={() => handleResetAbilities(char.id)}
+              onAdjustXp={(delta) => handleAdjustXp(char.id, delta)}
               onOpenShop={() => setActiveShopCharId(char.id)}
               onOpenLog={() => setActiveLogCharId(char.id)}
             />
@@ -269,6 +308,7 @@ export default function App() {
           character={activeShopChar}
           onClose={() => setActiveShopCharId(null)}
           onBuy={(item) => handleBuyItem(activeShopChar.id, item)}
+          onAddItem={(itemName) => handleAddItem(activeShopChar.id, itemName)}
           onRemoveItem={(idx) => handleRemoveItem(activeShopChar.id, idx)}
         />
       )}

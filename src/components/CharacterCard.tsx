@@ -15,8 +15,18 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { Alignment, Character, formatCoins, formatMod, swapFirstName, swapSobriquet } from '../dccData';
-import { Button } from './ui';
+import {
+  AbilityKey,
+  Alignment,
+  Character,
+  STARTER_ITEM_SUGGESTIONS,
+  formatCoins,
+  formatMod,
+  splitCoins,
+  swapFirstName,
+  swapSobriquet,
+} from '../dccData';
+import { Button, ConfirmDialog } from './ui';
 
 export interface CharacterCardProps {
   char: Character;
@@ -26,7 +36,12 @@ export interface CharacterCardProps {
   onUpdateAlignment: (align: Alignment) => void;
   onAdjustHp: (delta: number) => void;
   onToggleDead: () => void;
+  onAddItem: (itemName: string) => void;
   onRemoveItem: (index: number) => void;
+  onSetCoins: (gp: number, sp: number, cp: number) => void;
+  onAdjustAbility: (stat: AbilityKey, delta: number) => void;
+  onResetAbilities: () => void;
+  onAdjustXp: (delta: number) => void;
   onOpenShop: () => void;
   onOpenLog: () => void;
 }
@@ -39,23 +54,56 @@ export function CharacterCard({
   onUpdateAlignment,
   onAdjustHp,
   onToggleDead,
+  onAddItem,
   onRemoveItem,
+  onSetCoins,
+  onAdjustAbility,
+  onResetAbilities,
+  onAdjustXp,
   onOpenShop,
   onOpenLog,
 }: CharacterCardProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(char.name);
+  const [isAddingItem, setIsAddingItem] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [pendingRemove, setPendingRemove] = useState<{ index: number; name: string } | null>(null);
+  const [isEditingPurse, setIsEditingPurse] = useState(false);
+  const [coinInputs, setCoinInputs] = useState(() => splitCoins(char.coins));
   const nameInputId = useId();
   const alignSelectId = useId();
+  const addItemInputId = useId();
+  const starterListId = useId();
+  const gpInputId = useId();
+  const spInputId = useId();
+  const cpInputId = useId();
 
   useEffect(() => {
     setTempName(char.name);
   }, [char.name]);
 
+  useEffect(() => {
+    setCoinInputs(splitCoins(char.coins));
+  }, [char.coins]);
+
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateName(tempName.trim() || char.name);
     setIsEditingName(false);
+  };
+
+  const handleAddItemSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newItemName.trim()) return;
+    onAddItem(newItemName);
+    setNewItemName('');
+    setIsAddingItem(false);
+  };
+
+  const handlePurseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSetCoins(coinInputs.gp, coinInputs.sp, coinInputs.cp);
+    setIsEditingPurse(false);
   };
 
   return (
@@ -135,12 +183,33 @@ export function CharacterCard({
               </div>
             )}
 
-            <p className="text-xs md:text-sm font-bold text-[#6e2c14] uppercase tracking-wider mt-0.5">
-              {char.title} <span className="text-[#3d2817]">({char.race})</span>
-              <span className="ml-2 font-mono-stats text-[11px] text-[#4a3728] font-semibold">
-                &bull; XP: {char.xp}/10
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs md:text-sm font-bold text-[#6e2c14] uppercase tracking-wider mt-0.5">
+              <span>
+                {char.title} <span className="text-[#3d2817]">({char.race})</span>
               </span>
-            </p>
+              <span className="inline-flex items-center gap-1 font-mono-stats text-[11px] font-semibold">
+                <span className="text-[#4a3728]">&bull;</span>
+                <button
+                  type="button"
+                  onClick={() => onAdjustXp(-1)}
+                  aria-label={`Decrease XP for ${char.name}`}
+                  className="print:hidden w-4 h-4 inline-flex items-center justify-center rounded-sm bg-[#eadbb8] hover:bg-[#dcc594] text-[#3d2817] border border-[#7c5828]/70 cursor-pointer"
+                >
+                  <Minus className="w-2.5 h-2.5" aria-hidden="true" />
+                </button>
+                <span className={char.xp >= 10 ? 'text-[#1e5631] font-bold print:text-black' : 'text-[#4a3728]'}>
+                  XP: {char.xp}/10
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onAdjustXp(1)}
+                  aria-label={`Increase XP for ${char.name}`}
+                  className="print:hidden w-4 h-4 inline-flex items-center justify-center rounded-sm bg-[#eadbb8] hover:bg-[#dcc594] text-[#3d2817] border border-[#7c5828]/70 cursor-pointer"
+                >
+                  <Plus className="w-2.5 h-2.5" aria-hidden="true" />
+                </button>
+              </span>
+            </div>
           </div>
 
           {/* ALIGNMENT & SHEET CONTROLS */}
@@ -186,37 +255,98 @@ export function CharacterCard({
           </div>
         </div>
 
-        {/* CORE ABILITIES STRIP (3d6 Straight) */}
-        <div className="grid grid-cols-6 gap-1.5 mb-2.5 text-center">
-          {[
-            { label: 'STR', val: char.abilities.str, mod: char.abilityMods.strMod },
-            { label: 'AGI', val: char.abilities.agi, mod: char.abilityMods.agiMod },
-            { label: 'STA', val: char.abilities.sta, mod: char.abilityMods.staMod },
-            { label: 'PER', val: char.abilities.per, mod: char.abilityMods.perMod },
-            { label: 'INT', val: char.abilities.int, mod: char.abilityMods.intMod },
-            { label: 'LCK', val: char.abilities.lck, mod: char.abilityMods.luckMod },
-          ].map((stat) => (
-            <div key={stat.label} className="dcc-stat-box rounded-sm py-1 px-0.5 flex flex-col items-center">
-              <span className="font-display text-[10px] font-bold text-[#4a3728] tracking-wider">
-                {stat.label}
-              </span>
-              <span className="font-mono-stats text-sm md:text-base font-bold text-[#1a1410] leading-tight">
-                {stat.val}
-              </span>
-              <span
-                className={`font-mono-stats text-[11px] font-bold leading-tight ${
-                  stat.mod > 0
-                    ? 'text-[#1e5631] print:text-black'
-                    : stat.mod < 0
-                    ? 'text-[#8b1a1a] print:text-black'
-                    : 'text-[#5c4938] print:text-black'
-                }`}
-              >
-                {formatMod(stat.mod)}
-              </span>
+        {/* CORE ABILITIES STRIP (3d6 Straight, with temporary override controls) */}
+        {(() => {
+          const abilityEntries: ReadonlyArray<{
+            key: AbilityKey;
+            label: string;
+            val: number;
+            baseVal: number;
+            mod: number;
+          }> = [
+            { key: 'str', label: 'STR', val: char.abilities.str, baseVal: char.baseAbilities?.str ?? char.abilities.str, mod: char.abilityMods.strMod },
+            { key: 'agi', label: 'AGI', val: char.abilities.agi, baseVal: char.baseAbilities?.agi ?? char.abilities.agi, mod: char.abilityMods.agiMod },
+            { key: 'sta', label: 'STA', val: char.abilities.sta, baseVal: char.baseAbilities?.sta ?? char.abilities.sta, mod: char.abilityMods.staMod },
+            { key: 'per', label: 'PER', val: char.abilities.per, baseVal: char.baseAbilities?.per ?? char.abilities.per, mod: char.abilityMods.perMod },
+            { key: 'int', label: 'INT', val: char.abilities.int, baseVal: char.baseAbilities?.int ?? char.abilities.int, mod: char.abilityMods.intMod },
+            { key: 'lck', label: 'LCK', val: char.abilities.lck, baseVal: char.baseAbilities?.lck ?? char.abilities.lck, mod: char.abilityMods.luckMod },
+          ];
+          const hasOverrides = abilityEntries.some((s) => s.val !== s.baseVal);
+
+          return (
+            <div className="mb-2.5">
+              <div className="grid grid-cols-6 gap-1.5 text-center">
+                {abilityEntries.map((stat) => {
+                  const isOverridden = stat.val !== stat.baseVal;
+                  return (
+                    <div
+                      key={stat.key}
+                      className={`dcc-stat-box rounded-sm py-1 px-0.5 flex flex-col items-center ${
+                        isOverridden ? 'ring-1 ring-[#8b1a1a]' : ''
+                      }`}
+                    >
+                      <span className="font-display text-[10px] font-bold text-[#4a3728] tracking-wider">
+                        {stat.label}
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => onAdjustAbility(stat.key, -1)}
+                          aria-label={`Decrease ${stat.label} for ${char.name}`}
+                          className="print:hidden w-4 h-4 flex items-center justify-center rounded-sm bg-[#eadbb8] hover:bg-[#dcc594] text-[#3d2817] border border-[#7c5828]/70 cursor-pointer"
+                        >
+                          <Minus className="w-2.5 h-2.5" aria-hidden="true" />
+                        </button>
+                        <span
+                          className={`font-mono-stats text-sm md:text-base font-bold leading-tight ${
+                            isOverridden ? 'text-[#8b1a1a] print:text-black' : 'text-[#1a1410]'
+                          }`}
+                        >
+                          {stat.val}
+                          {isOverridden && (
+                            <span className="text-[10px] text-[#5c4938] font-normal">
+                              /{stat.baseVal}
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onAdjustAbility(stat.key, 1)}
+                          aria-label={`Increase ${stat.label} for ${char.name}`}
+                          className="print:hidden w-4 h-4 flex items-center justify-center rounded-sm bg-[#eadbb8] hover:bg-[#dcc594] text-[#3d2817] border border-[#7c5828]/70 cursor-pointer"
+                        >
+                          <Plus className="w-2.5 h-2.5" aria-hidden="true" />
+                        </button>
+                      </div>
+                      <span
+                        className={`font-mono-stats text-[11px] font-bold leading-tight ${
+                          stat.mod > 0
+                            ? 'text-[#1e5631] print:text-black'
+                            : stat.mod < 0
+                            ? 'text-[#8b1a1a] print:text-black'
+                            : 'text-[#5c4938] print:text-black'
+                        }`}
+                      >
+                        {formatMod(stat.mod)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {hasOverrides && (
+                <div className="print:hidden mt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onResetAbilities}
+                    className="text-[11px] font-bold text-[#8b1a1a] hover:underline cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" aria-hidden="true" /> Reset temporary stat overrides
+                  </button>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          );
+        })()}
 
         {/* COMBAT & DERIVED STATS */}
         <div className="grid grid-cols-4 gap-1.5 mb-2.5 text-center">
@@ -361,39 +491,144 @@ export function CharacterCard({
             <dd className="font-semibold text-right text-[#1a1410]">{char.tradeItem}</dd>
           </div>
           <div className="flex justify-between gap-3 items-start">
-            <dt className="font-bold text-[#4a3728] shrink-0">Inventory:</dt>
-            <dd className="font-medium text-right text-[#1a1410] flex flex-wrap justify-end gap-1">
-              {char.inventory.length === 0 ? (
-                <span className="italic text-[#5c4938]">None</span>
-              ) : (
-                char.inventory.map((item, idx) => (
-                  <span
-                    key={`${item}-${idx}`}
-                    className="inline-flex items-center gap-1 bg-[#eadbb8]/80 border border-[#5c3d1e]/40 rounded-sm px-1.5 py-0.5 text-[11px] print:bg-transparent print:border-0 print:p-0"
-                  >
-                    <span>
-                      {item}
-                      <span className="hidden print:inline">
-                        {idx < char.inventory.length - 1 ? ',' : ''}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveItem(idx)}
-                      aria-label={`Remove ${item} from ${char.name}'s inventory`}
-                      className="print:hidden text-[#6e2c14] hover:text-[#8b1a1a] cursor-pointer leading-none"
+            <dt className="font-bold text-[#4a3728] shrink-0 flex items-center gap-1">
+              <span>Inventory:</span>
+              <button
+                type="button"
+                onClick={() => setIsAddingItem((prev) => !prev)}
+                aria-label={`Add starter item to ${char.name}'s inventory`}
+                title="Add starter or custom item"
+                className="print:hidden w-4 h-4 inline-flex items-center justify-center rounded-sm bg-[#eadbb8] hover:bg-[#dcc594] text-[#3d2817] border border-[#7c5828] cursor-pointer"
+              >
+                <Plus className="w-2.5 h-2.5" aria-hidden="true" />
+              </button>
+            </dt>
+            <dd className="font-medium text-right text-[#1a1410] flex-1">
+              <div className="flex flex-wrap justify-end gap-1">
+                {char.inventory.length === 0 ? (
+                  <span className="italic text-[#5c4938]">None</span>
+                ) : (
+                  char.inventory.map((item, idx) => (
+                    <span
+                      key={`${item}-${idx}`}
+                      className="inline-flex items-center gap-1 bg-[#eadbb8]/80 border border-[#5c3d1e]/40 rounded-sm px-1.5 py-0.5 text-[11px] print:bg-transparent print:border-0 print:p-0"
                     >
-                      <X className="w-3 h-3" aria-hidden="true" />
-                    </button>
-                  </span>
-                ))
+                      <span>
+                        {item}
+                        <span className="hidden print:inline">
+                          {idx < char.inventory.length - 1 ? ',' : ''}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPendingRemove({ index: idx, name: item })}
+                        aria-label={`Remove ${item} from ${char.name}'s inventory`}
+                        className="print:hidden text-[#6e2c14] hover:text-[#8b1a1a] cursor-pointer leading-none"
+                      >
+                        <X className="w-3 h-3" aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              {isAddingItem && (
+                <form
+                  onSubmit={handleAddItemSubmit}
+                  className="print:hidden mt-1.5 flex items-center justify-end gap-1"
+                >
+                  <label htmlFor={addItemInputId} className="visually-hidden">
+                    Starter or custom item name
+                  </label>
+                  <input
+                    id={addItemInputId}
+                    list={starterListId}
+                    type="text"
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    placeholder="Add starter item (e.g. Iron helmet)"
+                    className="px-2 py-0.5 bg-white border border-[#5c3d1e] rounded-sm text-xs text-[#1a1410] w-48"
+                    autoFocus
+                  />
+                  <datalist id={starterListId}>
+                    {STARTER_ITEM_SUGGESTIONS.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                  <Button type="submit" variant="forest" size="xs">
+                    Add
+                  </Button>
+                </form>
               )}
             </dd>
           </div>
-          <div className="flex justify-between gap-3">
+          <div className="flex justify-between gap-3 items-start">
             <dt className="font-bold text-[#4a3728] shrink-0">Purse:</dt>
-            <dd className="font-mono-stats font-bold text-[#6e2c14] flex items-center gap-1 print:text-black">
-              <Coins className="w-3.5 h-3.5 inline" aria-hidden="true" /> {formatCoins(char.coins)}
+            <dd className="font-mono-stats font-bold text-[#6e2c14] print:text-black">
+              {isEditingPurse ? (
+                <form onSubmit={handlePurseSubmit} className="print:hidden flex flex-wrap items-center justify-end gap-1.5">
+                  <label htmlFor={gpInputId} className="inline-flex items-center gap-0.5 text-[11px] text-[#3d2817]">
+                    <input
+                      id={gpInputId}
+                      type="number"
+                      min={0}
+                      value={coinInputs.gp}
+                      onChange={(e) => setCoinInputs((prev) => ({ ...prev, gp: Math.max(0, Number(e.target.value) || 0) }))}
+                      className="w-12 px-1 py-0.5 bg-white border border-[#5c3d1e] rounded-sm text-xs text-[#1a1410] text-right"
+                    />
+                    <span>gp</span>
+                  </label>
+                  <label htmlFor={spInputId} className="inline-flex items-center gap-0.5 text-[11px] text-[#3d2817]">
+                    <input
+                      id={spInputId}
+                      type="number"
+                      min={0}
+                      value={coinInputs.sp}
+                      onChange={(e) => setCoinInputs((prev) => ({ ...prev, sp: Math.max(0, Number(e.target.value) || 0) }))}
+                      className="w-12 px-1 py-0.5 bg-white border border-[#5c3d1e] rounded-sm text-xs text-[#1a1410] text-right"
+                    />
+                    <span>sp</span>
+                  </label>
+                  <label htmlFor={cpInputId} className="inline-flex items-center gap-0.5 text-[11px] text-[#3d2817]">
+                    <input
+                      id={cpInputId}
+                      type="number"
+                      min={0}
+                      value={coinInputs.cp}
+                      onChange={(e) => setCoinInputs((prev) => ({ ...prev, cp: Math.max(0, Number(e.target.value) || 0) }))}
+                      className="w-12 px-1 py-0.5 bg-white border border-[#5c3d1e] rounded-sm text-xs text-[#1a1410] text-right"
+                    />
+                    <span>cp</span>
+                  </label>
+                  <Button type="submit" variant="forest" size="xs">
+                    Save
+                  </Button>
+                  <Button
+                    variant="parchment"
+                    size="xs"
+                    onClick={() => {
+                      setCoinInputs(splitCoins(char.coins));
+                      setIsEditingPurse(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoinInputs(splitCoins(char.coins));
+                    setIsEditingPurse(true);
+                  }}
+                  aria-label={`Edit purse for ${char.name}`}
+                  className="inline-flex items-center gap-1 hover:underline decoration-[#8b1a1a] cursor-pointer"
+                >
+                  <Coins className="w-3.5 h-3.5 inline" aria-hidden="true" />
+                  <span>{formatCoins(char.coins)}</span>
+                  <Pencil className="w-3 h-3 text-[#6b4c2e] print:hidden" aria-hidden="true" />
+                </button>
+              )}
             </dd>
           </div>
           <div className="flex justify-between gap-3">
@@ -422,6 +657,23 @@ export function CharacterCard({
           <FileText className="w-3.5 h-3.5" aria-hidden="true" /> Dice Log
         </Button>
       </div>
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Remove Inventory Item"
+          message={
+            <>
+              Remove <strong>{pendingRemove.name}</strong> from <strong>{char.name}</strong>&apos;s
+              inventory?
+            </>
+          }
+          onConfirm={() => {
+            onRemoveItem(pendingRemove.index);
+            setPendingRemove(null);
+          }}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
     </article>
   );
 }

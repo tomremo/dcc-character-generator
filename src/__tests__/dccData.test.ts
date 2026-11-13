@@ -5,7 +5,12 @@ import {
   OCCUPATIONS,
   SHOP_ITEMS,
   SOBRIQUETS,
+  STARTER_ITEM_SUGGESTIONS,
   WEAPON_DATA,
+  addInventoryItem,
+  adjustAbilityScore,
+  adjustCoins,
+  adjustXp,
   buyEquipmentItem,
   formatCoins,
   formatMod,
@@ -14,6 +19,9 @@ import {
   getAbilityMod,
   getShieldRestrictionReason,
   removeInventoryItem,
+  resetAbilityOverrides,
+  setCoinsFromDenominations,
+  splitCoins,
   swapFirstName,
   swapSobriquet,
 } from '../dccData';
@@ -187,5 +195,105 @@ describe('Equipment purchase & removal', () => {
     expect(afterRemoveArmor.ac).toBe(11); // 10 + 0 + 1
     expect(afterRemoveArmor.checkPenalty).toBe(0);
     expect(afterRemoveArmor.fumbleDie).toBe('1d4');
+  });
+
+  it('adds starter/custom items, ignores blanks, and recomputes AC for armor/shields', () => {
+    expect(STARTER_ITEM_SUGGESTIONS).toContain('Iron helmet');
+    expect(STARTER_ITEM_SUGGESTIONS).toContain('Steel helmet');
+
+    const base = {
+      ...generateCharacter([]),
+      baseAC: 10,
+      augurACBonus: 0,
+      armor: 'Unarmored',
+      armorBonus: 0,
+      armorCheckPenalty: 0,
+      armorFumbleDie: '1d4',
+      hasShield: false,
+      ac: 10,
+      checkPenalty: 0,
+      fumbleDie: '1d4',
+      inventory: ['Torch (1)'],
+    };
+
+    expect(addInventoryItem(base, '   ')).toBe(base);
+
+    const withHelmet = addInventoryItem(base, '  Iron helmet  ');
+    expect(withHelmet.inventory).toEqual(['Torch (1)', 'Iron helmet']);
+    expect(withHelmet.ac).toBe(10);
+
+    const withShield = addInventoryItem(withHelmet, 'Shield');
+    expect(withShield.hasShield).toBe(true);
+    expect(withShield.ac).toBe(11);
+    expect(withShield.checkPenalty).toBe(-1);
+    expect(withShield.fumbleDie).toBe('1d8');
+  });
+
+  it('splits, adjusts, and sets coinage by gp/sp/cp denominations', () => {
+    expect(splitCoins(0)).toEqual({ gp: 0, sp: 0, cp: 0 });
+    expect(splitCoins(345)).toEqual({ gp: 3, sp: 4, cp: 5 });
+    expect(splitCoins(-10)).toEqual({ gp: 0, sp: 0, cp: 0 });
+
+    const base = { ...generateCharacter([]), coins: 35 };
+    expect(adjustCoins(base, 100).coins).toBe(135);
+    expect(adjustCoins(base, -20).coins).toBe(15);
+    expect(adjustCoins(base, -999).coins).toBe(0);
+
+    expect(setCoinsFromDenominations(base, 2, 5, 7).coins).toBe(257);
+    expect(setCoinsFromDenominations(base, -1, 0, -5).coins).toBe(0);
+  });
+
+  it('applies temporary ability score overrides, recomputes derived stats, and resets cleanly', () => {
+    const base = {
+      ...generateCharacter([]),
+      race: 'Human' as const,
+      augur: { id: 1, name: 'Harsh winter', desc: 'All attack rolls', affect: 'all_att' },
+      baseAbilities: { str: 10, agi: 10, sta: 10, per: 10, int: 10, lck: 10 },
+      abilities: { str: 10, agi: 10, sta: 10, per: 10, int: 10, lck: 10 },
+      abilityMods: { strMod: 0, agiMod: 0, staMod: 0, perMod: 0, intMod: 0, luckMod: 0 },
+      baseAC: 10,
+      augurACBonus: 0,
+      armorBonus: 0,
+      hasShield: false,
+      ac: 10,
+      initMod: 0,
+      saves: { fort: 0, ref: 0, will: 0 },
+      weapon: {
+        name: 'Club',
+        type: 'melee' as const,
+        damage: '1d4',
+        range: '-',
+        isTwoHanded: false,
+        attBonus: 0,
+        dmgBonus: 0,
+        ammo: '',
+      },
+    };
+
+    const boostedAgi = adjustAbilityScore(base, 'agi', 6);
+    expect(boostedAgi.abilities.agi).toBe(16);
+    expect(boostedAgi.baseAbilities?.agi).toBe(10);
+    expect(boostedAgi.abilityMods.agiMod).toBe(2);
+    expect(boostedAgi.ac).toBe(12);
+    expect(boostedAgi.initMod).toBe(2);
+    expect(boostedAgi.saves.ref).toBe(2);
+
+    const drainedStr = adjustAbilityScore(boostedAgi, 'str', -15);
+    expect(drainedStr.abilities.str).toBe(0);
+    expect(drainedStr.abilityMods.strMod).toBe(-3);
+    expect(drainedStr.weapon.attBonus).toBe(-3);
+    expect(drainedStr.weapon.dmgBonus).toBe(-3);
+
+    const reset = resetAbilityOverrides(drainedStr);
+    expect(reset.abilities).toEqual({ str: 10, agi: 10, sta: 10, per: 10, int: 10, lck: 10 });
+    expect(reset.ac).toBe(10);
+    expect(reset.weapon.attBonus).toBe(0);
+  });
+
+  it('adjusts XP and clamps at 0', () => {
+    const base = { ...generateCharacter([]), xp: 0 };
+    expect(adjustXp(base, 3).xp).toBe(3);
+    expect(adjustXp(adjustXp(base, 12), -2).xp).toBe(10);
+    expect(adjustXp(base, -5).xp).toBe(0);
   });
 });

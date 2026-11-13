@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
-import { Check, ShoppingBag, X } from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { Check, Plus, ShoppingBag, X } from 'lucide-react';
 import {
   Character,
   SHOP_ITEMS,
+  STARTER_ITEM_SUGGESTIONS,
   ShopItem,
   formatCoins,
   getShieldRestrictionReason,
 } from '../dccData';
-import { Button, ModalDialog, SegmentedTabs, StatusBanner } from './ui';
+import { Button, ConfirmDialog, ModalDialog, SegmentedTabs, StatusBanner } from './ui';
 
 type ShopCategory = 'All' | 'Adventuring Gear' | 'Weapons' | 'Armor';
 
@@ -22,6 +23,7 @@ export interface EquipmentShopModalProps {
   character: Character;
   onClose: () => void;
   onBuy: (item: ShopItem) => void;
+  onAddItem: (itemName: string) => void;
   onRemoveItem: (index: number) => void;
 }
 
@@ -29,10 +31,15 @@ export function EquipmentShopModal({
   character,
   onClose,
   onBuy,
+  onAddItem,
   onRemoveItem,
 }: EquipmentShopModalProps) {
   const [selectedCategory, setSelectedCategory] = useState<ShopCategory>('All');
   const [lastPurchased, setLastPurchased] = useState<string | null>(null);
+  const [starterItemInput, setStarterItemInput] = useState('');
+  const [pendingRemove, setPendingRemove] = useState<{ index: number; name: string } | null>(null);
+  const addStarterId = useId();
+  const starterListId = useId();
 
   const filteredItems = SHOP_ITEMS.filter(
     (item) => selectedCategory === 'All' || item.category === selectedCategory
@@ -48,6 +55,15 @@ export function EquipmentShopModal({
   const handleRemove = (itemName: string, index: number) => {
     onRemoveItem(index);
     setLastPurchased(`Removed ${itemName} from pack`);
+  };
+
+  const handleAddStarter = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = starterItemInput.trim();
+    if (!trimmed) return;
+    onAddItem(trimmed);
+    setStarterItemInput('');
+    setLastPurchased(`Added ${trimmed} to pack`);
   };
 
   return (
@@ -108,7 +124,7 @@ export function EquipmentShopModal({
                 <span>{invItem}</span>
                 <button
                   type="button"
-                  onClick={() => handleRemove(invItem, idx)}
+                  onClick={() => setPendingRemove({ index: idx, name: invItem })}
                   aria-label={`Remove ${invItem}`}
                   className="text-[#6e2c14] hover:text-[#8b1a1a] cursor-pointer leading-none"
                 >
@@ -118,6 +134,29 @@ export function EquipmentShopModal({
             ))}
           </div>
         )}
+
+        <form onSubmit={handleAddStarter} className="mt-2 flex items-center gap-1.5">
+          <label htmlFor={addStarterId} className="visually-hidden">
+            Add starter or custom item
+          </label>
+          <input
+            id={addStarterId}
+            list={starterListId}
+            type="text"
+            value={starterItemInput}
+            onChange={(e) => setStarterItemInput(e.target.value)}
+            placeholder="Add starter / custom item (e.g. Iron helmet)"
+            className="flex-1 px-2 py-1 bg-white border border-[#5c3d1e] rounded-sm text-xs text-[#1a1410]"
+          />
+          <datalist id={starterListId}>
+            {STARTER_ITEM_SUGGESTIONS.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
+          <Button type="submit" variant="parchment" size="xs">
+            <Plus className="w-3 h-3" aria-hidden="true" /> Add Starter
+          </Button>
+        </form>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-2 pr-1">
@@ -168,6 +207,23 @@ export function EquipmentShopModal({
           );
         })}
       </div>
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Remove Inventory Item"
+          message={
+            <>
+              Remove <strong>{pendingRemove.name}</strong> from <strong>{character.name}</strong>&apos;s
+              pack?
+            </>
+          }
+          onConfirm={() => {
+            handleRemove(pendingRemove.name, pendingRemove.index);
+            setPendingRemove(null);
+          }}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
     </ModalDialog>
   );
 }

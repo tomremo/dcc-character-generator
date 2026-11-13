@@ -75,14 +75,16 @@ body {
 }
 
 /* Native <dialog> modal rules (modern-web-guidance: dialog) */
-dialog:modal {
-  overscroll-behavior: contain;
-  margin: auto;
-  padding: 0;
-  border: none;
-  background: transparent;
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100dvh - 2rem);
+@layer base {
+  dialog:modal {
+    overscroll-behavior: contain;
+    margin: auto;
+    padding: 0;
+    border: none;
+    background: transparent;
+    max-width: calc(100vw - 2rem);
+    max-height: calc(100dvh - 2rem);
+  }
 }
 
 dialog::backdrop {

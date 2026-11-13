@@ -47,6 +47,8 @@ export interface ShopItem {
   type?: 'armor' | 'shield';
 }
 
+export type AbilityKey = 'str' | 'agi' | 'sta' | 'per' | 'int' | 'lck';
+
 export interface Character {
   id: string;
   name: string;
@@ -55,14 +57,8 @@ export interface Character {
   alignment: Alignment;
   xp: number;
   isDead: boolean;
-  abilities: {
-    str: number;
-    agi: number;
-    sta: number;
-    per: number;
-    int: number;
-    lck: number;
-  };
+  baseAbilities?: Record<AbilityKey, number>;
+  abilities: Record<AbilityKey, number>;
   abilityMods: {
     strMod: number;
     agiMod: number;
@@ -497,17 +493,48 @@ export const rollDice = (count: number, sides: number): { total: number; rolls: 
   return { total, rolls };
 };
 
+export const splitCoins = (totalCp: number): { gp: number; sp: number; cp: number } => {
+  const safeTotal = Math.max(0, Math.trunc(totalCp));
+  const gp = Math.floor(safeTotal / 100);
+  const remCp = safeTotal % 100;
+  const sp = Math.floor(remCp / 10);
+  const cp = remCp % 10;
+  return { gp, sp, cp };
+};
+
 export const formatCoins = (totalCp: number): string => {
-  const gp = Math.floor(totalCp / 100);
-  const remCp1 = totalCp % 100;
-  const sp = Math.floor(remCp1 / 10);
-  const cp = remCp1 % 10;
+  const { gp, sp, cp } = splitCoins(totalCp);
 
   const parts: string[] = [];
   if (gp > 0) parts.push(`${gp} gp`);
   if (sp > 0) parts.push(`${sp} sp`);
   if (cp > 0 || parts.length === 0) parts.push(`${cp} cp`);
   return parts.join(', ');
+};
+
+export const adjustCoins = (char: Character, deltaCp: number): Character => ({
+  ...char,
+  coins: Math.max(0, char.coins + Math.trunc(deltaCp)),
+});
+
+export const adjustXp = (char: Character, deltaXp: number): Character => ({
+  ...char,
+  xp: Math.max(0, char.xp + Math.trunc(deltaXp)),
+});
+
+export const setCoinsFromDenominations = (
+  char: Character,
+  gp: number,
+  sp: number,
+  cp: number
+): Character => {
+  const safeGp = Math.max(0, Math.trunc(gp) || 0);
+  const safeSp = Math.max(0, Math.trunc(sp) || 0);
+  const safeCp = Math.max(0, Math.trunc(cp) || 0);
+  return {
+    ...char,
+    coins: safeGp * 100 + safeSp * 10 + safeCp,
+  };
 };
 
 const FUMBLE_ORDER = ['1d4', '1d8', '1d12', '1d16'] as const;
@@ -581,10 +608,24 @@ const ARMOR_CATALOG: ReadonlyArray<{
   { match: ['Leather Armor (+2 AC)', 'Leather armor'], label: 'Leather armor', bonus: 2, checkPen: -1, fumble: '1d8' },
 ];
 
-export const removeInventoryItem = (char: Character, index: number): Character => {
-  if (index < 0 || index >= char.inventory.length) return char;
+export const STARTER_ITEM_SUGGESTIONS: string[] = Array.from(
+  new Set([
+    ...STARTING_EQUIPMENT,
+    'Iron helmet',
+    'Steel helmet',
+    'Shield',
+    'Leather armor',
+    'Hide armor',
+    'Fine tools',
+    'Tarot deck',
+    'Spyglass',
+    'Net',
+    'Pushcart',
+    'Bag of night soil',
+  ])
+).sort((a, b) => a.localeCompare(b));
 
-  const updatedInventory = char.inventory.filter((_, idx) => idx !== index);
+const recomputeEquipmentStats = (char: Character, updatedInventory: string[]): Character => {
   const hasShield = updatedInventory.some((item) => item === 'Shield' || item === 'Shield (+1 AC)');
 
   const bestArmor = ARMOR_CATALOG.find((entry) =>
@@ -618,6 +659,122 @@ export const removeInventoryItem = (char: Character, index: number): Character =
     checkPenalty,
     fumbleDie,
   };
+};
+
+export const addInventoryItem = (char: Character, itemName: string): Character => {
+  const trimmed = itemName.trim();
+  if (!trimmed) return char;
+  return recomputeEquipmentStats(char, [...char.inventory, trimmed]);
+};
+
+export const removeInventoryItem = (char: Character, index: number): Character => {
+  if (index < 0 || index >= char.inventory.length) return char;
+  return recomputeEquipmentStats(
+    char,
+    char.inventory.filter((_, idx) => idx !== index)
+  );
+};
+
+const recomputeCharacterFromAbilities = (
+  char: Character,
+  nextAbilities: Record<AbilityKey, number>
+): Character => {
+  const strMod = getAbilityMod(nextAbilities.str);
+  const agiMod = getAbilityMod(nextAbilities.agi);
+  const staMod = getAbilityMod(nextAbilities.sta);
+  const perMod = getAbilityMod(nextAbilities.per);
+  const intMod = getAbilityMod(nextAbilities.int);
+  const luckMod = getAbilityMod(nextAbilities.lck);
+  const augurId = char.augur.id;
+
+  const baseAC = 10 + agiMod;
+  const augurACBonus = augurId === 23 ? luckMod : 0;
+  const ac = baseAC + char.armorBonus + (char.hasShield ? 1 : 0) + augurACBonus;
+
+  const saves = {
+    fort: staMod + (augurId === 17 || augurId === 21 ? luckMod : 0),
+    ref: agiMod + (augurId === 17 || augurId === 20 ? luckMod : 0),
+    will: perMod + (augurId === 17 || augurId === 22 ? luckMod : 0),
+  };
+
+  const initMod = agiMod + (augurId === 24 ? luckMod : 0);
+
+  let speed = char.race === 'Dwarf' || char.race === 'Halfling' ? 20 : 30;
+  if (augurId === 30) speed += luckMod * 5;
+  speed = Math.max(5, speed);
+
+  const critBonus = augurId === 26 ? luckMod * 2 : luckMod;
+  const fumbleMod = augurId === 28 ? -luckMod * 2 : -luckMod;
+
+  const isMissile = char.weapon.type === 'missile';
+  const isMeleeOrThrown = char.weapon.type === 'melee' || char.weapon.type === 'melee/thrown';
+
+  let attBonus = isMissile ? agiMod : strMod;
+  if (augurId === 1) attBonus += luckMod;
+  if (augurId === 2 && isMeleeOrThrown) attBonus += luckMod;
+  if (augurId === 3 && isMissile) attBonus += luckMod;
+  if (augurId === 9) attBonus += luckMod;
+
+  let dmgBonus = isMissile ? 0 : strMod;
+  if (augurId === 6) dmgBonus += luckMod;
+  if (augurId === 7 && isMeleeOrThrown) dmgBonus += luckMod;
+  if (augurId === 8 && isMissile) dmgBonus += luckMod;
+  if (augurId === 9) dmgBonus += luckMod;
+
+  let thrownAttBonus = char.weapon.thrownAttBonus;
+  let thrownDmgBonus = char.weapon.thrownDmgBonus;
+  if (char.weapon.type === 'melee/thrown') {
+    thrownAttBonus = agiMod;
+    if (augurId === 1) thrownAttBonus += luckMod;
+    if (augurId === 3) thrownAttBonus += luckMod;
+    if (augurId === 9) thrownAttBonus += luckMod;
+
+    thrownDmgBonus = 0;
+    if (augurId === 6) thrownDmgBonus += luckMod;
+    if (augurId === 8) thrownDmgBonus += luckMod;
+    if (augurId === 9) thrownDmgBonus += luckMod;
+  }
+
+  return {
+    ...char,
+    baseAbilities: char.baseAbilities ?? { ...char.abilities },
+    abilities: nextAbilities,
+    abilityMods: { strMod, agiMod, staMod, perMod, intMod, luckMod },
+    baseAC,
+    augurACBonus,
+    ac,
+    saves,
+    initMod,
+    speed,
+    critBonus,
+    fumbleMod,
+    weapon: {
+      ...char.weapon,
+      attBonus,
+      dmgBonus,
+      thrownAttBonus,
+      thrownDmgBonus,
+    },
+  };
+};
+
+export const adjustAbilityScore = (
+  char: Character,
+  stat: AbilityKey,
+  delta: number
+): Character => {
+  const baseAbilities = char.baseAbilities ?? { ...char.abilities };
+  const nextVal = Math.max(0, Math.min(25, char.abilities[stat] + Math.trunc(delta)));
+  if (nextVal === char.abilities[stat] && char.baseAbilities) return char;
+  return recomputeCharacterFromAbilities(
+    { ...char, baseAbilities },
+    { ...char.abilities, [stat]: nextVal }
+  );
+};
+
+export const resetAbilityOverrides = (char: Character): Character => {
+  if (!char.baseAbilities) return char;
+  return recomputeCharacterFromAbilities(char, { ...char.baseAbilities });
 };
 
 // ==========================================
@@ -847,6 +1004,7 @@ export const generateCharacter = (partyContext: Character[] = []): Character => 
     alignment,
     xp: 0,
     isDead: false,
+    baseAbilities: { str, agi, sta, per, int: intSc, lck },
     abilities: { str, agi, sta, per, int: intSc, lck },
     abilityMods: { strMod, agiMod, staMod, perMod, intMod, luckMod },
     hp,
