@@ -16,12 +16,30 @@ import {
   setCoinsFromDenominations,
 } from './src/dccData';
 import { copyTextReliable, formatPartyMarkdown } from './src/exportUtils';
+import { loadSoundPreference, playDiceSound, saveSoundPreference } from './src/soundUtils';
 import { PartyMode, loadSavedPartyState, savePartyState } from './src/storageUtils';
-import { CharacterCard } from './src/components/CharacterCard';
+import { CharacterCard, CharacterRollRequest } from './src/components/CharacterCard';
+import { CritFumbleModal } from './src/components/CritFumbleModal';
+import { DiceTray } from './src/components/DiceTray';
 import { EquipmentShopModal } from './src/components/EquipmentShopModal';
 import { ExportModal } from './src/components/ExportModal';
+import { InitiativeTracker } from './src/components/InitiativeTracker';
 import { RollLogModal } from './src/components/RollLogModal';
 import { Button, SegmentedTabs } from './src/components/ui';
+import {
+  DccDieSides,
+  DiceRollResult,
+  applyLuckBurnToRoll,
+  rollDieExpression,
+  rollLuckCheck,
+  shiftDieOnChain,
+} from './src/diceUtils';
+import {
+  InitiativeEntry,
+  advanceInitiativeTurn,
+  rollPartyInitiative,
+  sortInitiativeEntries,
+} from './src/initiativeUtils';
 
 const PARTY_MODE_TABS: ReadonlyArray<{ id: PartyMode; label: React.ReactNode }> = [
   {
@@ -62,6 +80,17 @@ export default function App() {
   const [activeShopCharId, setActiveShopCharId] = useState<string | null>(null);
   const [activeLogCharId, setActiveLogCharId] = useState<string | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [rollHistory, setRollHistory] = useState<DiceRollResult[]>([]);
+  const [isTrayOpen, setIsTrayOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => loadSoundPreference());
+  const [dieShiftSteps, setDieShiftSteps] = useState(0);
+  const [situationalMod, setSituationalMod] = useState(0);
+  const [tablesModalTab, setTablesModalTab] = useState<'crit' | 'fumble' | null>(null);
+
+  const [initiativeEntries, setInitiativeEntries] = useState<InitiativeEntry[]>([]);
+  const [activeTurnIndex, setActiveTurnIndex] = useState(0);
+  const [initiativeRound, setInitiativeRound] = useState(1);
+  const [isInitOpen, setIsInitOpen] = useState(false);
 
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [statusMessage, setStatusMessage] = useState('');
@@ -128,8 +157,10 @@ export default function App() {
     setParty((prev) => prev.map((c) => (c.id === charId ? buyEquipmentItem(c, item) : c)));
   };
 
-  const handleAddItem = (charId: string, itemName: string) => {
-    setParty((prev) => prev.map((c) => (c.id === charId ? addInventoryItem(c, itemName) : c)));
+  const handleAddItem = (charId: string, itemName: string, quantity = 1) => {
+    setParty((prev) =>
+      prev.map((c) => (c.id === charId ? addInventoryItem(c, itemName, quantity) : c))
+    );
   };
 
   const handleRemoveItem = (charId: string, index: number) => {
@@ -157,6 +188,195 @@ export default function App() {
   const handleAdjustXp = (charId: string, deltaXp: number) => {
     setParty((prev) =>
       prev.map((c) => (c.id === charId ? adjustXp(c, deltaXp) : c))
+    );
+  };
+
+  const pushRoll = (result: DiceRollResult) => {
+    if (soundEnabled) {
+      playDiceSound({ isNat20: result.isNat20, isNat1: result.isNat1 });
+    }
+    setRollHistory((prev) => [result, ...prev].slice(0, 30));
+    setIsTrayOpen(true);
+  };
+
+  const handleToggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      saveSoundPreference(next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setInitiativeEntries((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next = prev
+        .map((entry) => {
+          if (!entry.characterId) return entry;
+          const char = party.find((c) => c.id === entry.characterId);
+          if (!char) {
+            changed = true;
+            return null;
+          }
+          if (char.isDead !== entry.isDead || char.name !== entry.name) {
+            changed = true;
+            return { ...entry, isDead: char.isDead, name: char.name };
+          }
+          return entry;
+        })
+        .filter((e): e is InitiativeEntry => e !== null);
+      return changed ? next : prev;
+    });
+  }, [party]);
+
+  const applyDieChainShift = (expr: string, steps: number): string => {
+    if (steps === 0) return expr;
+    const match = expr.trim().match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+    if (!match) return expr;
+    const count = match[1] || '1';
+    const shiftedSides = shiftDieOnChain(Number.parseInt(match[2], 10), steps);
+    const suffix = match[3] || '';
+    return `${count}d${shiftedSides}${suffix}`;
+  };
+
+  const handleCharacterRoll = (char: Character, req: CharacterRollRequest) => {
+    const result =
+      req.kind === 'luckCheck'
+        ? rollLuckCheck(char)
+        : rollDieExpression(
+            applyDieChainShift(req.expr, dieShiftSteps),
+            req.modifier + situationalMod,
+            {
+              characterId: char.id,
+              characterName: char.name,
+              label: req.label,
+              isAttack: req.isAttack,
+            }
+          );
+    pushRoll(result);
+
+    if (req.kind !== 'luckCheck' && req.label.toLowerCase().includes('init')) {
+      setInitiativeEntries((prev) => {
+        const entry: InitiativeEntry = {
+          id: `char-${char.id}`,
+          characterId: char.id,
+          name: char.name,
+          initiative: result.total,
+          isEnemy: false,
+          isDead: char.isDead,
+          initDie: char.initDie,
+          initMod: char.initMod,
+        };
+        const filtered = prev.filter((e) => e.characterId !== char.id);
+        return sortInitiativeEntries([...filtered, entry]);
+      });
+    }
+  };
+
+  const handleFreeformRoll = (sides: DccDieSides) => {
+    const shiftedSides = shiftDieOnChain(sides, dieShiftSteps);
+    pushRoll(
+      rollDieExpression(`1d${shiftedSides}`, situationalMod, {
+        label: `d${shiftedSides}`,
+      })
+    );
+  };
+
+  const handleFollowUpRoll = (roll: DiceRollResult) => {
+    const char = roll.characterId ? party.find((c) => c.id === roll.characterId) : undefined;
+    if (roll.followUpType === 'crit') {
+      const result = rollDieExpression(char?.critDie ?? '1d4', char?.critBonus ?? 0, {
+        characterId: char?.id,
+        characterName: char?.name ?? roll.characterName,
+        label: `Crit Table ${char?.critTable ?? 'I'}`,
+        tableKind: 'crit',
+      });
+      pushRoll(result);
+    } else if (roll.followUpType === 'fumble') {
+      const result = rollDieExpression(char?.fumbleDie ?? '1d4', char?.fumbleMod ?? 0, {
+        characterId: char?.id,
+        characterName: char?.name ?? roll.characterName,
+        label: 'Fumble',
+        tableKind: 'fumble',
+      });
+      pushRoll(result);
+    }
+  };
+
+  const handleRollPartyInit = () => {
+    const rolledParty = rollPartyInitiative(party);
+    setInitiativeEntries((prev) => {
+      const enemies = prev.filter((e) => e.isEnemy);
+      return sortInitiativeEntries([...rolledParty, ...enemies]);
+    });
+    setActiveTurnIndex(0);
+    setInitiativeRound(1);
+    setIsInitOpen(true);
+  };
+
+  const handleNextInitTurn = () => {
+    const { nextIndex, nextRound } = advanceInitiativeTurn(
+      initiativeEntries,
+      activeTurnIndex,
+      initiativeRound
+    );
+    setActiveTurnIndex(nextIndex);
+    setInitiativeRound(nextRound);
+  };
+
+  const handleAddEnemyInit = (name: string, manualInit?: number) => {
+    const initiative =
+      manualInit !== undefined ? manualInit : rollDieExpression('1d20').total;
+    const entry: InitiativeEntry = {
+      id: `enemy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      initiative,
+      isEnemy: true,
+      isDead: false,
+      initDie: '1d20',
+      initMod: 0,
+    };
+    setInitiativeEntries((prev) => sortInitiativeEntries([...prev, entry]));
+    setIsInitOpen(true);
+  };
+
+  const handleAdjustInit = (id: string, delta: number) => {
+    setInitiativeEntries((prev) =>
+      sortInitiativeEntries(
+        prev.map((e) => (e.id === id ? { ...e, initiative: e.initiative + delta } : e))
+      )
+    );
+  };
+
+  const handleRemoveInitEntry = (id: string) => {
+    setInitiativeEntries((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      if (activeTurnIndex >= next.length) {
+        setActiveTurnIndex(0);
+      }
+      return next;
+    });
+  };
+
+  const handleClearInit = () => {
+    setInitiativeEntries([]);
+    setActiveTurnIndex(0);
+    setInitiativeRound(1);
+  };
+
+  const handleBurnLuck = (rollId: string) => {
+    const targetRoll = rollHistory.find((r) => r.id === rollId);
+    if (!targetRoll?.characterId) return;
+    const char = party.find((c) => c.id === targetRoll.characterId);
+    if (!char || char.abilities.lck <= 0) return;
+
+    const isHalfling = char.race === 'Halfling';
+    setParty((prev) =>
+      prev.map((c) => (c.id === char.id ? adjustAbilityScore(c, 'lck', -1) : c))
+    );
+    setRollHistory((prev) =>
+      prev.map((r) => (r.id === rollId ? applyLuckBurnToRoll(r, isHalfling) : r))
     );
   };
 
@@ -194,6 +414,7 @@ export default function App() {
 
   const activeShopChar = party.find((c) => c.id === activeShopCharId) || null;
   const activeLogChar = party.find((c) => c.id === activeLogCharId) || null;
+  const latestTableRoll = rollHistory.find((r) => r.tableKind) ?? null;
 
   return (
     <div className="min-h-screen bg-[#14110f] text-[#e7dec8] p-3 md:p-6 print:p-0 print:bg-white print:text-black">
@@ -272,6 +493,21 @@ export default function App() {
 
       {/* MAIN CONTAINER */}
       <main className="max-w-6xl mx-auto">
+        <InitiativeTracker
+          entries={initiativeEntries}
+          activeTurnIndex={activeTurnIndex}
+          round={initiativeRound}
+          isOpen={isInitOpen}
+          hasLivingParty={party.some((c) => !c.isDead)}
+          onToggleOpen={() => setIsInitOpen((prev) => !prev)}
+          onRollParty={handleRollPartyInit}
+          onNextTurn={handleNextInitTurn}
+          onAddEnemy={handleAddEnemyInit}
+          onAdjustInit={handleAdjustInit}
+          onRemoveEntry={handleRemoveInitEntry}
+          onClear={handleClearInit}
+        />
+
         <div
           className={`grid gap-5 ${
             mode === 'funnel'
@@ -289,12 +525,13 @@ export default function App() {
               onUpdateAlignment={(align) => updateCharacterAlignment(char.id, align)}
               onAdjustHp={(delta) => adjustHp(char.id, delta)}
               onToggleDead={() => toggleDead(char.id)}
-              onAddItem={(itemName) => handleAddItem(char.id, itemName)}
+              onAddItem={(itemName, quantity) => handleAddItem(char.id, itemName, quantity)}
               onRemoveItem={(idx) => handleRemoveItem(char.id, idx)}
               onSetCoins={(gp, sp, cp) => handleSetCoins(char.id, gp, sp, cp)}
               onAdjustAbility={(stat, delta) => handleAdjustAbility(char.id, stat, delta)}
               onResetAbilities={() => handleResetAbilities(char.id)}
               onAdjustXp={(delta) => handleAdjustXp(char.id, delta)}
+              onRoll={(req) => handleCharacterRoll(char, req)}
               onOpenShop={() => setActiveShopCharId(char.id)}
               onOpenLog={() => setActiveLogCharId(char.id)}
             />
@@ -308,7 +545,7 @@ export default function App() {
           character={activeShopChar}
           onClose={() => setActiveShopCharId(null)}
           onBuy={(item) => handleBuyItem(activeShopChar.id, item)}
-          onAddItem={(itemName) => handleAddItem(activeShopChar.id, itemName)}
+          onAddItem={(itemName, quantity) => handleAddItem(activeShopChar.id, itemName, quantity)}
           onRemoveItem={(idx) => handleRemoveItem(activeShopChar.id, idx)}
         />
       )}
@@ -332,6 +569,44 @@ export default function App() {
           onClose={() => setIsExportOpen(false)}
         />
       )}
+
+      {/* CRIT & FUMBLE REFERENCE MODAL */}
+      {tablesModalTab && (
+        <CritFumbleModal
+          initialTab={tablesModalTab}
+          highlightedRoll={
+            latestTableRoll?.tableKind
+              ? { kind: latestTableRoll.tableKind, total: latestTableRoll.total }
+              : null
+          }
+          onClose={() => setTablesModalTab(null)}
+        />
+      )}
+
+      {/* COLLAPSIBLE DCC DICE TRAY */}
+      <DiceTray
+        history={rollHistory}
+        isOpen={isTrayOpen}
+        soundEnabled={soundEnabled}
+        party={party}
+        dieShiftSteps={dieShiftSteps}
+        situationalMod={situationalMod}
+        onToggleOpen={() => setIsTrayOpen((prev) => !prev)}
+        onToggleSound={handleToggleSound}
+        onRollDie={handleFreeformRoll}
+        onBurnLuck={handleBurnLuck}
+        onFollowUpRoll={handleFollowUpRoll}
+        onClearHistory={() => setRollHistory([])}
+        onChangeDieShift={(delta) =>
+          setDieShiftSteps((prev) => Math.max(-6, Math.min(6, prev + delta)))
+        }
+        onChangeSituationalMod={(delta) => setSituationalMod((prev) => prev + delta)}
+        onResetRollMods={() => {
+          setDieShiftSteps(0);
+          setSituationalMod(0);
+        }}
+        onOpenTables={(tab) => setTablesModalTab(tab ?? 'crit')}
+      />
     </div>
   );
 }

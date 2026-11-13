@@ -661,10 +661,16 @@ const recomputeEquipmentStats = (char: Character, updatedInventory: string[]): C
   };
 };
 
-export const addInventoryItem = (char: Character, itemName: string): Character => {
+export const addInventoryItem = (
+  char: Character,
+  itemName: string,
+  quantity = 1
+): Character => {
   const trimmed = itemName.trim();
   if (!trimmed) return char;
-  return recomputeEquipmentStats(char, [...char.inventory, trimmed]);
+  const normalizedQty = Number.isFinite(quantity) ? Math.max(1, Math.min(99, Math.floor(quantity))) : 1;
+  const entry = normalizedQty > 1 ? `${trimmed} (x${normalizedQty})` : trimmed;
+  return recomputeEquipmentStats(char, [...char.inventory, entry]);
 };
 
 export const removeInventoryItem = (char: Character, index: number): Character => {

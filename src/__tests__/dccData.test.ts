@@ -227,6 +227,12 @@ describe('Equipment purchase & removal', () => {
     expect(withShield.ac).toBe(11);
     expect(withShield.checkPenalty).toBe(-1);
     expect(withShield.fumbleDie).toBe('1d8');
+
+    const withStack = addInventoryItem(base, '  Iron spike ', 5);
+    expect(withStack.inventory).toEqual(['Torch (1)', 'Iron spike (x5)']);
+
+    const withSingle = addInventoryItem(base, 'Silver key', 1);
+    expect(withSingle.inventory).toEqual(['Torch (1)', 'Silver key']);
   });
 
   it('splits, adjusts, and sets coinage by gp/sp/cp denominations', () => {

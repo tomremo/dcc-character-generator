@@ -23,7 +23,7 @@ export interface EquipmentShopModalProps {
   character: Character;
   onClose: () => void;
   onBuy: (item: ShopItem) => void;
-  onAddItem: (itemName: string) => void;
+  onAddItem: (itemName: string, quantity?: number) => void;
   onRemoveItem: (index: number) => void;
 }
 
@@ -37,6 +37,7 @@ export function EquipmentShopModal({
   const [selectedCategory, setSelectedCategory] = useState<ShopCategory>('All');
   const [lastPurchased, setLastPurchased] = useState<string | null>(null);
   const [starterItemInput, setStarterItemInput] = useState('');
+  const [starterItemQty, setStarterItemQty] = useState(1);
   const [pendingRemove, setPendingRemove] = useState<{ index: number; name: string } | null>(null);
   const addStarterId = useId();
   const starterListId = useId();
@@ -61,9 +62,12 @@ export function EquipmentShopModal({
     e.preventDefault();
     const trimmed = starterItemInput.trim();
     if (!trimmed) return;
-    onAddItem(trimmed);
+    onAddItem(trimmed, starterItemQty);
     setStarterItemInput('');
-    setLastPurchased(`Added ${trimmed} to pack`);
+    setStarterItemQty(1);
+    setLastPurchased(
+      `Added ${starterItemQty > 1 ? `${trimmed} (x${starterItemQty})` : trimmed} to pack`
+    );
   };
 
   return (
@@ -137,7 +141,7 @@ export function EquipmentShopModal({
 
         <form onSubmit={handleAddStarter} className="mt-2 flex items-center gap-1.5">
           <label htmlFor={addStarterId} className="visually-hidden">
-            Add starter or custom item
+            Add custom or starter item
           </label>
           <input
             id={addStarterId}
@@ -145,8 +149,18 @@ export function EquipmentShopModal({
             type="text"
             value={starterItemInput}
             onChange={(e) => setStarterItemInput(e.target.value)}
-            placeholder="Add starter / custom item (e.g. Iron helmet)"
+            placeholder="Custom item (e.g. Torch, Silver key)"
             className="flex-1 px-2 py-1 bg-white border border-[#5c3d1e] rounded-sm text-xs text-[#1a1410]"
+          />
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={starterItemQty}
+            onChange={(e) => setStarterItemQty(Math.max(1, Number.parseInt(e.target.value, 10) || 1))}
+            aria-label="Custom item quantity"
+            title="Quantity"
+            className="w-12 px-1.5 py-1 bg-white border border-[#5c3d1e] rounded-sm text-xs font-mono-stats text-center text-[#1a1410]"
           />
           <datalist id={starterListId}>
             {STARTER_ITEM_SUGGESTIONS.map((item) => (
@@ -154,7 +168,7 @@ export function EquipmentShopModal({
             ))}
           </datalist>
           <Button type="submit" variant="parchment" size="xs">
-            <Plus className="w-3 h-3" aria-hidden="true" /> Add Starter
+            <Plus className="w-3 h-3" aria-hidden="true" /> Add Custom
           </Button>
         </form>
       </div>
